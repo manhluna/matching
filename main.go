@@ -605,9 +605,12 @@ func main() {
 			break
 		}
 
+		fmt.Println(m.Topic)
 		if m.Topic == "new-order-request-"+Env("LEFT")+Env("RIGHT") {
-			if RediGet("Offset") == -1 {
-				RediSet("Offset", m.Offset)
+			fmt.Println(true)
+
+			if RediGet("Offset"+Env("LEFT")+Env("RIGHT")) == -1 {
+				RediSet("Offset"+Env("LEFT")+Env("RIGHT"), m.Offset)
 				req := ToStructRequest(string(m.Value))
 
 				if !RediGetBool(req.OpenID) {
@@ -620,8 +623,8 @@ func main() {
 				}
 			}
 
-			if m.Offset-RediGet("Offset") == 1 {
-				RediIncr("Offset")
+			if m.Offset-RediGet("Offset"+Env("LEFT")+Env("RIGHT")) == 1 {
+				RediIncr("Offset" + Env("LEFT") + Env("RIGHT"))
 				req := ToStructRequest(string(m.Value))
 
 				if !RediGetBool(req.OpenID) {
