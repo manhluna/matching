@@ -165,8 +165,8 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 							last.Price = book.Sell[i].Price
 							last.QtyTotal = _amount
 							book.Sell[i].QtyTotal -= _amount
-							_amount = 0
 							totalValue += _amount * book.Sell[i].Price
+							_amount = 0
 							break
 						}
 					}
@@ -204,13 +204,13 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 				}
 				response.Queue = kq
 				response.Status = true
+
 				if amount > 0 {
-					response.AvgPrice = totalValue / amount
+					response.AvgPrice = totalValue / (amount - _amount)
 				} else {
 					response.AvgPrice = 0
 				}
 				response.OrderBook = book
-				fmt.Println(response)
 				return response
 			}
 		case "Cancel":
@@ -291,8 +291,9 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 							last.Price = book.Buy[i].Price
 							last.QtyTotal = _amount
 							book.Buy[i].QtyTotal -= _amount
-							_amount = 0
 							totalValue += _amount * book.Buy[i].Price
+							_amount = 0
+
 							break
 						}
 					}
@@ -330,7 +331,11 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 				}
 				response.Queue = kq
 				response.Status = true
-				response.AvgPrice = totalValue / amount
+				if amount > 0 {
+					response.AvgPrice = totalValue / (amount - _amount)
+				} else {
+					response.AvgPrice = 0
+				}
 				response.OrderBook = book
 				return response
 			}
@@ -597,8 +602,6 @@ func main() {
 		// reader.SetOffset(5)
 		m, err := reader.ReadMessage(context.Background())
 		if err != nil {
-			fmt.Println("B")
-
 			break
 		}
 
