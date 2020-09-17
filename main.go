@@ -217,7 +217,7 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 			{
 				for i, order := range mapOrder[price] {
 					if order.OpenID == openID {
-						response.Status = true
+						response.Status = false
 						if len(mapOrder[price]) > 1 {
 							mapOrder[price] = append(mapOrder[price][:i], mapOrder[price][i+1:]...)
 						} else {
