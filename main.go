@@ -57,6 +57,8 @@ type Response struct {
 	Status       bool    `json:"status"`
 	AvgPrice     float64 `json:"avgPrice"`
 	OrderBook    Book    `json:"orderBook"`
+	Vol          float64 `json:"vol"`
+	Side         bool    `json:"side"`
 }
 
 var reader = kafka.NewReader(kafka.ReaderConfig{
@@ -211,6 +213,8 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 					response.AvgPrice = 0
 				}
 				response.OrderBook = book
+				response.Side = side
+				response.Vol = amount - _amount
 				return response
 			}
 		case "Cancel":
@@ -337,6 +341,8 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 					response.AvgPrice = 0
 				}
 				response.OrderBook = book
+				response.Side = side
+				response.Vol = amount - _amount
 				return response
 			}
 		case "Cancel":
