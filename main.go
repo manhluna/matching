@@ -48,19 +48,6 @@ type Book struct {
 
 var book = Book{}
 
-// Response of Neworder
-type Response struct {
-	OpenID       string  `json:"openID"`
-	ChangePrice  float64 `json:"changePrice"`
-	ChangeAmount float64 `json:"changeAmount"`
-	Queue        []Order `json:"queue"`
-	Status       bool    `json:"status"`
-	AvgPrice     float64 `json:"avgPrice"`
-	OrderBook    Book    `json:"orderBook"`
-	Vol          float64 `json:"vol"`
-	Side         bool    `json:"side"`
-}
-
 var reader = kafka.NewReader(kafka.ReaderConfig{
 	Brokers:   []string{Env("KAFKA_HOST")},
 	Topic:     "new-order-request-" + Env("LEFT") + Env("RIGHT"),
@@ -104,47 +91,83 @@ func InsertBook(side []Unit, item Unit, buy bool) []Unit {
 
 // Request ...........
 type Request struct {
+	UserID       string  `json:"userID"`
+	OpenID       string  `json:"openID"`
+	Type         string  `json:"_type"`
+	Side         bool    `json:"side"`
+	Price        float64 `json:"price"`
+	Amount       float64 `json:"amount"`
+	BalanceLeft  float64 `json:"balanceLeft"`
+	BalanceRight float64 `json:"balanceRight"`
+}
+
+// Response of Neworder
+type Response struct {
 	UserID string  `json:"userID"`
 	OpenID string  `json:"openID"`
 	Type   string  `json:"_type"`
-	Side   bool    `json:"side"`
 	Price  float64 `json:"price"`
 	Amount float64 `json:"amount"`
+	Left   string  `json:"left"`
+	Right  string  `json:"right"`
+	Side   bool    `json:"side"`
+
+	Queue     []Order `json:"queue"`
+	OrderBook Book    `json:"orderBook"`
+
+	// ChangePrice  float64 `json:"changePrice"`
+	// ChangeAmount float64 `json:"changeAmount"`
+	// Status       bool    `json:"status"`
+	// AvgPrice     float64 `json:"avgPrice"`
+	// Vol          float64 `json:"vol"`
 }
 
-func newOrder(userID, openID, _type string, side bool, price, amount float64) Response {
+func newOrder(userID, openID, _type string, side bool, price, amount, balanceLeft, balanceRight float64) Response {
 	var response = Response{}
 	response.OpenID = openID
+	response.UserID = userID
 
 	if side {
 		switch _type {
 		case "Limit":
 			{
 				if amount == 0 || price == 0 {
-					response.Status = true
+					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
 					return response
 				}
+
+				if price*amount > balanceRight || amount < 0 {
+					response.OpenID = "err"
+					return response
+				}
+
 				_price := price
 				if len(book.Sell) > 0 && price >= book.Sell[0].Price {
 					_price = MIN
-					response.ChangePrice = _price
+					// response.ChangePrice = _price
 					if len(book.Buy) > 0 {
 						_price = book.Buy[0].Price
-						response.ChangePrice = _price
+						// response.ChangePrice = _price
 					}
 				}
 				book.Buy = InsertBook(book.Buy, Unit{_price, amount}, side)
 				mapOrder[_price] = append(mapOrder[_price], Order{openID, amount})
-				response.Status = true
+				// response.Status = true
+				response.Price = _price
 				response.OrderBook = book
+				response.Type = _type
+				response.Amount = amount
+				response.Side = side
+				response.Left = Env("LEFT")
+				response.Right = Env("RIGHT")
 				return response
 			}
 		case "Market":
 			{
 				if amount == 0 {
-					response.Status = true
+					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
 					return response
@@ -173,8 +196,12 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 						}
 					}
 				}
+				if totalValue > balanceRight || amount < 0 {
+					response.OpenID = "err"
+					return response
+				}
 				if _amount > 0 {
-					response.ChangeAmount = _amount
+					// response.ChangeAmount = _amount
 				}
 				if ix >= 0 {
 					book.Sell = book.Sell[ix+1:]
@@ -205,23 +232,28 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 					mapOrder[last.Price] = mapOrder[last.Price][_i+1:]
 				}
 				response.Queue = kq
-				response.Status = true
+				// response.Status = true
 
 				if amount > 0 {
-					response.AvgPrice = totalValue / (amount - _amount)
+					// response.AvgPrice = totalValue / (amount - _amount)
 				} else {
-					response.AvgPrice = 0
+					// response.AvgPrice = 0
 				}
+				response.Price = totalValue / (amount - _amount)
 				response.OrderBook = book
+				response.Type = _type
+				response.Amount = amount - _amount
 				response.Side = side
-				response.Vol = amount - _amount
+				response.Left = Env("LEFT")
+				response.Right = Env("RIGHT")
+				// response.Vol = amount - _amount
 				return response
 			}
 		case "Cancel":
 			{
 				for i, order := range mapOrder[price] {
 					if order.OpenID == openID {
-						response.Status = false
+						// response.Status = false
 						if len(mapOrder[price]) > 1 {
 							mapOrder[price] = append(mapOrder[price][:i], mapOrder[price][i+1:]...)
 						} else {
@@ -241,6 +273,7 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 					}
 				}
 				response.OrderBook = book
+				response.Type = _type
 				return response
 			}
 		}
@@ -249,32 +282,48 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 		case "Limit":
 			{
 				if amount == 0 || price == 0 {
-					response.Status = true
+					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
 					return response
 				}
+
+				if amount > balanceLeft || amount < 0 {
+					response.OpenID = "err"
+					return response
+				}
+
 				_price := price
 				if len(book.Buy) > 0 && price <= book.Buy[0].Price {
 					_price = MAX
-					response.ChangePrice = _price
+					// response.ChangePrice = _price
 					if len(book.Sell) > 0 {
 						_price = book.Sell[0].Price
-						response.ChangePrice = _price
+						// response.ChangePrice = _price
 					}
 				}
 				book.Sell = InsertBook(book.Sell, Unit{_price, amount}, side)
 				mapOrder[_price] = append(mapOrder[_price], Order{openID, amount})
-				response.Status = true
+				// response.Status = true
+				response.Price = _price
 				response.OrderBook = book
+				response.Type = _type
+				response.Amount = amount
+				response.Side = side
+				response.Left = Env("LEFT")
+				response.Right = Env("RIGHT")
 				return response
 			}
 		case "Market":
 			{
 				if amount == 0 {
-					response.Status = true
+					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
+					return response
+				}
+				if amount > balanceLeft || amount < 0 {
+					response.OpenID = "err"
 					return response
 				}
 
@@ -302,8 +351,9 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 						}
 					}
 				}
+
 				if _amount > 0 {
-					response.ChangeAmount = _amount
+					// response.ChangeAmount = _amount
 				}
 				if ix >= 0 {
 					book.Buy = book.Buy[ix+1:]
@@ -334,22 +384,27 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 					mapOrder[last.Price] = mapOrder[last.Price][_i+1:]
 				}
 				response.Queue = kq
-				response.Status = true
+				// response.Status = true
 				if amount > 0 {
-					response.AvgPrice = totalValue / (amount - _amount)
+					// response.AvgPrice = totalValue / (amount - _amount)
 				} else {
-					response.AvgPrice = 0
+					// response.AvgPrice = 0
 				}
+				response.Price = totalValue / (amount - _amount)
 				response.OrderBook = book
+				response.Type = _type
+				response.Amount = amount - _amount
 				response.Side = side
-				response.Vol = amount - _amount
+				response.Left = Env("LEFT")
+				response.Right = Env("RIGHT")
+				// response.Vol = amount - _amount
 				return response
 			}
 		case "Cancel":
 			{
 				for i, order := range mapOrder[price] {
 					if order.OpenID == openID {
-						response.Status = true
+						// response.Status = true
 						mapOrder[price] = append(mapOrder[price][:i], mapOrder[price][i+1:]...)
 						break
 					}
@@ -365,6 +420,7 @@ func newOrder(userID, openID, _type string, side bool, price, amount float64) Re
 					}
 				}
 				response.OrderBook = book
+				response.Type = _type
 				return response
 			}
 		}
@@ -621,7 +677,7 @@ func main() {
 
 				if !RediGetBool(req.OpenID) {
 					RediSetBoolExp(req.OpenID, true)
-					res := newOrder(req.UserID, req.OpenID, req.Type, req.Side, req.Price, req.Amount)
+					res := newOrder(req.UserID, req.OpenID, req.Type, req.Side, req.Price, req.Amount, req.BalanceLeft, req.BalanceRight)
 					fmt.Println(ToStringResponse(res))
 
 					Push(ToStringResponse(res))
@@ -635,7 +691,7 @@ func main() {
 
 				if !RediGetBool(req.OpenID) {
 					RediSetBoolExp(req.OpenID, true)
-					res := newOrder(req.UserID, req.OpenID, req.Type, req.Side, req.Price, req.Amount)
+					res := newOrder(req.UserID, req.OpenID, req.Type, req.Side, req.Price, req.Amount, req.BalanceLeft, req.BalanceRight)
 					fmt.Println(ToStringResponse(res))
 
 					Push(ToStringResponse(res))
