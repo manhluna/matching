@@ -19,17 +19,8 @@ const MAX = 1000000000
 
 // Order struct about info of order
 type Order struct {
-	OpenID string  `json:"openID"` // Mã xác định
-	Amount float64 `json:"amount"` // So Luong
-	// price  float64 // Gia
-	// userID string  // Dinh danh nguoi dung
-	// side   bool    // Phia: Buy, Sell
-	// _type  string  // Loai Lenh: Limit, Market, Cancel
-	// left      string  // Coin Trai: Vd: BTC
-	// right     string  // Coin Phai: Vd: USDT
-	// fill      float64 // Mức độ Khớp
-	// Status    string  // Trạng thái, tình trạng lệnh
-	// timestamp int64   // Dấu thời gian
+	OpenID string  `json:"openID"`
+	Amount float64 `json:"amount"`
 }
 
 var mapOrder = make(map[float64][]Order)
@@ -114,12 +105,6 @@ type Response struct {
 
 	Queue     []Order `json:"queue"`
 	OrderBook Book    `json:"orderBook"`
-
-	// ChangePrice  float64 `json:"changePrice"`
-	// ChangeAmount float64 `json:"changeAmount"`
-	// Status       bool    `json:"status"`
-	// AvgPrice     float64 `json:"avgPrice"`
-	// Vol          float64 `json:"vol"`
 }
 
 func newOrder(userID, openID, _type string, side bool, price, amount, balanceLeft, balanceRight float64) Response {
@@ -132,7 +117,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 		case "Limit":
 			{
 				if amount == 0 || price == 0 {
-					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
 					return response
@@ -146,15 +130,12 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 				_price := price
 				if len(book.Sell) > 0 && price >= book.Sell[0].Price {
 					_price = MIN
-					// response.ChangePrice = _price
 					if len(book.Buy) > 0 {
 						_price = book.Buy[0].Price
-						// response.ChangePrice = _price
 					}
 				}
 				book.Buy = InsertBook(book.Buy, Unit{_price, amount}, side)
 				mapOrder[_price] = append(mapOrder[_price], Order{openID, amount})
-				// response.Status = true
 				response.Price = _price
 				response.OrderBook = book
 				response.Type = _type
@@ -167,7 +148,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 		case "Market":
 			{
 				if amount == 0 {
-					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
 					return response
@@ -200,9 +180,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 					response.OpenID = "err"
 					return response
 				}
-				if _amount > 0 {
-					// response.ChangeAmount = _amount
-				}
 				if ix >= 0 {
 					book.Sell = book.Sell[ix+1:]
 					for _, v := range pe {
@@ -232,13 +209,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 					mapOrder[last.Price] = mapOrder[last.Price][_i+1:]
 				}
 				response.Queue = kq
-				// response.Status = true
-
-				if amount > 0 {
-					// response.AvgPrice = totalValue / (amount - _amount)
-				} else {
-					// response.AvgPrice = 0
-				}
 				response.Price = totalValue / (amount - _amount)
 				response.OrderBook = book
 				response.Type = _type
@@ -246,14 +216,12 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 				response.Side = side
 				response.Left = Env("LEFT")
 				response.Right = Env("RIGHT")
-				// response.Vol = amount - _amount
 				return response
 			}
 		case "Cancel":
 			{
 				for i, order := range mapOrder[price] {
 					if order.OpenID == openID {
-						// response.Status = false
 						if len(mapOrder[price]) > 1 {
 							mapOrder[price] = append(mapOrder[price][:i], mapOrder[price][i+1:]...)
 						} else {
@@ -287,7 +255,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 		case "Limit":
 			{
 				if amount == 0 || price == 0 {
-					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
 					return response
@@ -301,15 +268,12 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 				_price := price
 				if len(book.Buy) > 0 && price <= book.Buy[0].Price {
 					_price = MAX
-					// response.ChangePrice = _price
 					if len(book.Sell) > 0 {
 						_price = book.Sell[0].Price
-						// response.ChangePrice = _price
 					}
 				}
 				book.Sell = InsertBook(book.Sell, Unit{_price, amount}, side)
 				mapOrder[_price] = append(mapOrder[_price], Order{openID, amount})
-				// response.Status = true
 				response.Price = _price
 				response.OrderBook = book
 				response.Type = _type
@@ -322,7 +286,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 		case "Market":
 			{
 				if amount == 0 {
-					// response.Status = true
 					response.OrderBook = book
 					response.OpenID = " "
 					return response
@@ -357,9 +320,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 					}
 				}
 
-				if _amount > 0 {
-					// response.ChangeAmount = _amount
-				}
 				if ix >= 0 {
 					book.Buy = book.Buy[ix+1:]
 					for _, v := range pe {
@@ -389,12 +349,6 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 					mapOrder[last.Price] = mapOrder[last.Price][_i+1:]
 				}
 				response.Queue = kq
-				// response.Status = true
-				if amount > 0 {
-					// response.AvgPrice = totalValue / (amount - _amount)
-				} else {
-					// response.AvgPrice = 0
-				}
 				response.Price = totalValue / (amount - _amount)
 				response.OrderBook = book
 				response.Type = _type
@@ -402,14 +356,12 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 				response.Side = side
 				response.Left = Env("LEFT")
 				response.Right = Env("RIGHT")
-				// response.Vol = amount - _amount
 				return response
 			}
 		case "Cancel":
 			{
 				for i, order := range mapOrder[price] {
 					if order.OpenID == openID {
-						// response.Status = true
 						mapOrder[price] = append(mapOrder[price][:i], mapOrder[price][i+1:]...)
 						break
 					}
