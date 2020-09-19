@@ -19,7 +19,7 @@ const MAX = 1000000000
 
 // Order struct about info of order
 type Order struct {
-	OpenID string  `json:"openid"` // Mã xác định
+	OpenID string  `json:"openID"` // Mã xác định
 	Amount float64 `json:"amount"` // So Luong
 	// price  float64 // Gia
 	// userID string  // Dinh danh nguoi dung
@@ -272,8 +272,13 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 						}
 					}
 				}
+				response.Price = price
 				response.OrderBook = book
 				response.Type = _type
+				response.Amount = amount
+				response.Side = side
+				response.Left = Env("LEFT")
+				response.Right = Env("RIGHT")
 				return response
 			}
 		}
@@ -419,8 +424,13 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 						}
 					}
 				}
+				response.Price = price
 				response.OrderBook = book
 				response.Type = _type
+				response.Amount = amount
+				response.Side = side
+				response.Left = Env("LEFT")
+				response.Right = Env("RIGHT")
 				return response
 			}
 		}
