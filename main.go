@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
+	"math/rand"
+	"strconv"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/segmentio/kafka-go"
@@ -80,6 +84,64 @@ func InsertBook(side []Unit, item Unit, buy bool) []Unit {
 	return append(side, item)
 }
 
+// FillSell ...
+func FillSell(_book Book) []Unit {
+	var dec = Env("DEC")
+	x, _ := strconv.ParseInt(dec, 10, 64)
+	var sc = math.Pow10(-int(x))
+
+	var listPrice []Unit
+	for i := 0; i < (len(_book.Sell)-1)/2; i++ {
+		amp := _book.Sell[i+1].Price - _book.Sell[i].Price
+		if amp > sc*10 {
+			var start = _book.Sell[i].Price
+			for {
+				if _book.Sell[i+1].Price-start <= sc*10 {
+					break
+				}
+				start = start + sc*randomInt(1, 10)
+				max := _book.Sell[i].QtyTotal
+				min := _book.Sell[i+1].QtyTotal
+				if min > max {
+					min = _book.Sell[i].QtyTotal
+					max = _book.Sell[i+1].QtyTotal
+				}
+				listPrice = append(listPrice, Unit{start, random(min/20, max/10, 3)})
+			}
+		}
+	}
+	return listPrice
+}
+
+// FillBuy ...
+func FillBuy(_book Book) []Unit {
+	var dec = Env("DEC")
+	x, _ := strconv.ParseInt(dec, 10, 64)
+	var sc = math.Pow10(-int(x))
+
+	var listPrice []Unit
+	for i := 0; i < (len(_book.Buy)-1)/2; i++ {
+		amp := _book.Buy[i+1].Price - _book.Buy[i].Price
+		if amp > sc*10 {
+			var start = _book.Buy[i].Price
+			for {
+				if _book.Buy[i+1].Price-start <= sc*10 {
+					break
+				}
+				start = start + sc*randomInt(1, 10)
+				max := _book.Buy[i].QtyTotal
+				min := _book.Buy[i+1].QtyTotal
+				if min > max {
+					min = _book.Buy[i].QtyTotal
+					max = _book.Buy[i+1].QtyTotal
+				}
+				listPrice = append(listPrice, Unit{start, random(min/20, max/10, 3)})
+			}
+		}
+	}
+	return listPrice
+}
+
 // Request ...........
 type Request struct {
 	UserID       string  `json:"userID"`
@@ -105,6 +167,7 @@ type Response struct {
 
 	Queue     []Order `json:"queue"`
 	OrderBook Book    `json:"orderBook"`
+	LastPrice float64 `json:"lastPrice"`
 }
 
 func newOrder(userID, openID, _type string, side bool, price, amount, balanceLeft, balanceRight float64) Response {
@@ -116,6 +179,10 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 		switch _type {
 		case "Limit":
 			{
+				// if Env("MAKER") == "true" {
+				// 	var amp = book.Sell[0].Price * 100 / book.Buy[0].Price
+				// 	fmt.Println(amp)
+				// }
 				if amount == 0 || price == 0 {
 					response.OrderBook = book
 					response.OpenID = " "
@@ -143,6 +210,16 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 				response.Side = side
 				response.Left = Env("LEFT")
 				response.Right = Env("RIGHT")
+
+				if Env("MAKER") == "true" {
+					_book := book
+					seedOrders := FillBuy(_book)
+					for _, v := range seedOrders {
+						_book.Buy = InsertBook(_book.Buy, v, side)
+					}
+					response.OrderBook = _book
+				}
+
 				return response
 			}
 		case "Market":
@@ -166,11 +243,13 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 							ix = i
 							pe = append(pe, book.Sell[i].Price)
 							totalValue += book.Sell[i].QtyTotal * book.Sell[i].Price
+							response.LastPrice = book.Sell[i].Price
 						} else {
 							last.Price = book.Sell[i].Price
 							last.QtyTotal = _amount
 							book.Sell[i].QtyTotal -= _amount
 							totalValue += _amount * book.Sell[i].Price
+							response.LastPrice = book.Sell[i].Price
 							_amount = 0
 							break
 						}
@@ -281,6 +360,16 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 				response.Side = side
 				response.Left = Env("LEFT")
 				response.Right = Env("RIGHT")
+
+				if Env("MAKER") == "true" {
+					_book := book
+					seedOrders := FillSell(_book)
+					for _, v := range seedOrders {
+						_book.Sell = InsertBook(_book.Sell, v, side)
+					}
+					response.OrderBook = _book
+				}
+
 				return response
 			}
 		case "Market":
@@ -308,11 +397,13 @@ func newOrder(userID, openID, _type string, side bool, price, amount, balanceLef
 							ix = i
 							pe = append(pe, book.Buy[i].Price)
 							totalValue += book.Buy[i].QtyTotal * book.Buy[i].Price
+							response.LastPrice = book.Buy[i].Price
 						} else {
 							last.Price = book.Buy[i].Price
 							last.QtyTotal = _amount
 							book.Buy[i].QtyTotal -= _amount
 							totalValue += _amount * book.Buy[i].Price
+							response.LastPrice = book.Buy[i].Price
 							_amount = 0
 
 							break
@@ -619,6 +710,18 @@ func Restore() {
 	}
 }
 
+func random(min, max float64, dec int) float64 {
+	maxI := int(math.Round(max * math.Pow10(dec)))
+	minI := int(math.Round(min*math.Pow10(dec)) + 1)
+	rand.Seed(time.Now().UnixNano())
+	return float64(rand.Intn(maxI-minI+1)+minI) / math.Pow10(dec)
+}
+
+func randomInt(min, max int) float64 {
+	rand.Seed(time.Now().UnixNano())
+	return float64(rand.Intn(max-min+1) + min)
+}
+
 func main() {
 	fmt.Println("Starting")
 	Restore()
@@ -629,10 +732,7 @@ func main() {
 			break
 		}
 
-		fmt.Println(m.Topic)
 		if m.Topic == "new-order-request-"+Env("LEFT")+Env("RIGHT") {
-			fmt.Println(true)
-
 			if RediGet("Offset"+Env("LEFT")+Env("RIGHT")) == -1 {
 				RediSet("Offset"+Env("LEFT")+Env("RIGHT"), m.Offset)
 				req := ToStructRequest(string(m.Value))
@@ -640,7 +740,7 @@ func main() {
 				if !RediGetBool(req.OpenID) {
 					RediSetBoolExp(req.OpenID, true)
 					res := newOrder(req.UserID, req.OpenID, req.Type, req.Side, req.Price, req.Amount, req.BalanceLeft, req.BalanceRight)
-					fmt.Println(ToStringResponse(res))
+					fmt.Println(res.OpenID)
 
 					Push(ToStringResponse(res))
 					Backup(book)
@@ -654,7 +754,7 @@ func main() {
 				if !RediGetBool(req.OpenID) {
 					RediSetBoolExp(req.OpenID, true)
 					res := newOrder(req.UserID, req.OpenID, req.Type, req.Side, req.Price, req.Amount, req.BalanceLeft, req.BalanceRight)
-					fmt.Println(ToStringResponse(res))
+					fmt.Println(res.OpenID)
 
 					Push(ToStringResponse(res))
 					Backup(book)
